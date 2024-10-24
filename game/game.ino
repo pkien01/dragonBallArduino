@@ -170,17 +170,26 @@ void animateJumping() {
   lcd.createChar(2, jumping2);
 
   int screenPos = person.pos >> 1;
+
+  lcd.setCursor(screenPos, 1);
+  lcd.write(byte(1)); 
+  delay(100);
   
-  lcd.clear();
-  displayBackground();
   lcd.setCursor(screenPos, 0);
   lcd.write(byte(2)); 
+  lcd.setCursor(screenPos, 1);
+  lcd.print(" "); 
   delay(200);
 
-  lcd.clear();
-  displayBackground();
+  lcd.setCursor(screenPos, 1);
+  lcd.write(byte(1));
+  lcd.setCursor(screenPos, 0);
+  lcd.print(" "); 
+  delay(100);
+
   lcd.setCursor(screenPos, 1);
   lcd.write(byte(0)); 
+  
   delay(100);
 }
 
