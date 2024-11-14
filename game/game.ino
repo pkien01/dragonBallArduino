@@ -139,7 +139,7 @@ void setup() {
   // for (int i = 0; i < 5; i++) {
   //   lcd.createChar(5 + i, blastTravel[i]);
   // }
-
+  blast.direction = 5;
   Wire.begin(9); 
   Wire.onReceive(receiveEvent);
 }
@@ -222,6 +222,7 @@ void animateStanding() {
   delay(200);
 }
 
+
 void animateShooting() {
    lcd.createChar(0, shooting);
   for (int i = 0; i < 5; i++) {
@@ -236,7 +237,6 @@ void animateShooting() {
     blast.pos = screenPos * 5;
     if (!isBlasting) return;
   } 
-  blast.direction = 5;
   
   for (byte i = 0; i < 5; i++) { 
     lcd.clear(); 
