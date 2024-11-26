@@ -74,6 +74,15 @@ public:
     }
     return *this;
   } 
+  Canvas reverseRows() {
+    Canvas res;
+    for (int i = 0; i < 8; i++) {
+      for (int j = 0; j < 5; j++) {
+        res.rows[i] |= (this->rows[i] >> j & 1) << (4 - j);
+      }
+    }
+    return res;
+  }
 };
 
 class Entity {
@@ -82,12 +91,17 @@ protected:
   int statePtr;
   Container<Canvas, 10> states;
   bool hide;
+  char label;
 public:
   Entity(int _row, int _col, int _statePtr) {
     r = _row;
     c = _col;
     statePtr = _statePtr;
     hide = false;
+    label = 0;
+  }
+  char getLabel() {
+    return label;
   }
   void setState(int _statePtr) {
     statePtr = _statePtr;
@@ -190,10 +204,26 @@ public:
         }
       }
     }
+
+    for (int i = 0; i < entities.size(); i++) {
+      // Serial.print("Entity ");
+      // Serial.println(i);
+      // Serial.print("row: ");
+      // Serial.println(entities[i]->row());
+      // Serial.print("col: ");
+      // Serial.println(entities[i]->col());
+      // Serial.println("***************");
+      // Serial.flush();
+      if (!entities[i]->hidden() && entities[i]->getLabel() > 0) {
+        lcd.setCursor(entities[i]->col(), entities[i]->row() == 0? 1 : 0);
+        lcd.print(entities[i]->getLabel());
+      }
+    }
+    delay(200);
   }
 };
 
-constexpr byte blastTravel[6][8] = {
+constexpr byte blastTravel[7][8] = {
   {
     B00000,
     B00000,
@@ -240,6 +270,16 @@ constexpr byte blastTravel[6][8] = {
     B00000,
     B00011,
     B00011,
+    B00000,
+    B00000,
+    B00000
+  },
+  {
+    B00000,
+    B00000,
+    B00000,
+    B00001,
+    B00001,
     B00000,
     B00000,
     B00000
@@ -249,14 +289,16 @@ class Projectile:  public Entity {
   int counter;
   Entity *entity;
   bool stop;
+  int dir;
 public:
-  Projectile(Entity *_entity): entity(_entity), Entity(_entity->row(), _entity->col() + 1, 0)  {
-    for (int i = 0; i < 5; i++) {
+  Projectile(Entity *_entity, int _dir): entity(_entity), Entity(_entity->row(), _entity->col() + _dir, 0)  {
+    for (int i = 0; i < 6; i++) {
       states.add(Canvas(blastTravel[i]));
     }
-    setState(5);
+    setState(_dir == 1? 0 : 5);
     hide = true;
     stop = true;
+    dir = _dir;
   }
   void update() {
     if (stop) {
@@ -268,15 +310,16 @@ public:
       Serial.flush();
     }
     if (hide) return;
-    if (counter >= 5) {
-      counter = 0;
-      if (++c > 15) {
+    if (counter < 0 || counter >= 6) {
+      counter = dir == 1? 0 : 6;
+      c += dir;
+      if (c < 0 || c > 15) {
         if (stop) hide = true;
-        else c = entity->col() + 1;
+        else c = entity->col() + dir;
       }
     }
     setState(counter);
-    counter++;
+    counter += dir == 1? 4 : -4;
   }
   void setStop() {
     stop = true;
@@ -286,7 +329,7 @@ public:
     if (hide) {
       hide = false;
       r = entity->row();
-      c = entity->col() + 1;
+      c = entity->col() + dir;
       counter = 0;
     }
   }
@@ -346,13 +389,14 @@ constexpr byte shootingBytes[8] = {
   B11010,
   B10011
 };
+
+
 class Human: public Entity {
-  constexpr static int MOVEMENT_DELAY = 1000;
   int runningCounter;
   int jumpingCounter;
   Projectile blast;
 public:
-  Human(int initR, int initC): Entity(initR, initC, 0), blast(this) {
+  Human(int initR, int initC): Entity(initR, initC, 0), blast(this, 1) {
     states.add(Canvas(standingBytes));
     states.add(Canvas(runningBytes));
     states.add(Canvas(jumping1Bytes));
@@ -368,14 +412,13 @@ public:
     } else {
       setState(0);
     }
-    if (runningCounter == 4) {
+    if (runningCounter == 16) {
       runningCounter = 0;
       if (c < 15) {
         c++;
       }
     }
     runningCounter++;
-    delay(MOVEMENT_DELAY);
   }
   void runLeft() {
     if (statePtr == 0) {
@@ -383,14 +426,13 @@ public:
     } else {
       setState(0);
     }
-    if (runningCounter == 4) {
+    if (runningCounter == 16) {
       runningCounter = 0;
       if (c > 0) {
         c--;
       }
     }
     runningCounter++;
-    delay(MOVEMENT_DELAY);
   }
   void jump() {
     if (statePtr == 0) {
@@ -404,7 +446,10 @@ public:
     } else {
       setState(0);
     }
-    delay(MOVEMENT_DELAY);
+  }
+  void resetFromJump() {
+    r = 1;
+    setState(0);
   }
   void shoot() {
     setState(4);
@@ -415,10 +460,84 @@ public:
   }
 };
 
+class Android: public Entity {
+  int runningCounter;
+  int jumpingCounter;
+  Projectile blast;
+public:
+  Android(int initR, int initC): Entity(initR, initC, 0), blast(this, -1) {
+    states.add(Canvas(standingBytes).reverseRows());
+    states.add(Canvas(runningBytes).reverseRows());
+    states.add(Canvas(jumping1Bytes).reverseRows());
+    states.add(Canvas(jumping2Bytes).reverseRows());
+    states.add(Canvas(shootingBytes).reverseRows());
+    runningCounter = 0;
+    jumpingCounter = 0;
+    setState(0);
+  }
+  void runRight() {
+    if (statePtr == 0) {
+      setState(1);
+    } else {
+      setState(0);
+    }
+    if (runningCounter == 16) {
+      runningCounter = 0;
+      if (c < 15) {
+        c++;
+      }
+    }
+    runningCounter++;
+  }
+  void runLeft() {
+    if (statePtr == 0) {
+      setState(1);
+    } else {
+      setState(0);
+    }
+    if (runningCounter == 16) {
+      runningCounter = 0;
+      if (c > 0) {
+        c--;
+      }
+    }
+    runningCounter++;
+  }
+  void jump() {
+    if (statePtr == 0) {
+      setState(2);
+    } else if (statePtr == 2) {
+      setState(3);
+      r = 1;
+    } else if (statePtr ==3) {
+      setState(2);
+      r = 0;
+    } else {
+      setState(0);
+    }
+  }
+  void resetFromJump() {
+    r = 1;
+    setState(0);
+  }
+  void shoot() {
+    setState(4);
+    blast.unsetStop();
+  }
+  Projectile& getBlast() {
+    return blast;
+  }
+  void update() {
+    shoot();
+  }
+};
+
+
 constexpr int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 Frame frame;
 Human player(1, 0);
+Android opponent(1, 15);
 void setup() {
   // put your setup code here, to run once:
   pinMode(A0, INPUT);
@@ -426,26 +545,35 @@ void setup() {
   lcd.begin(16, 2);
   frame.addEntity(&player);
   frame.addEntity(&player.getBlast());
+  frame.addEntity(&opponent);
+  frame.addEntity(&opponent.getBlast());
   Wire.begin(9); 
   Wire.onReceive(receiveEvent);
 }
 
+char prevCommand = 0;
 void receiveEvent(int bytes) {
 //  Serial.print("received: ");
   char command = Wire.read();
   // Serial.println(command);
   // Serial.flush();
   player.getBlast().setStop();
+  if (prevCommand == 'j' && command != 'j') {
+     player.resetFromJump();
+  }
   switch (command) {
     case 'l': player.runLeft(); break;
     case 'r': player.runRight(); break;
     case 'b': player.shoot(); break;
     case 'j': player.jump(); break;
   }
+  prevCommand = command;
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
   frame.draw(lcd);
   player.getBlast().update();
+  opponent.update();
+  opponent.getBlast().update();
 }
