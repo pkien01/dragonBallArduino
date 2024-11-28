@@ -519,6 +519,7 @@ public:
     runningCounter = 0;
     jumpingCounter = 0;
     setState(0);
+    blast.reset();
     health.reset();
   }
   void takeDamage() {
@@ -614,6 +615,7 @@ public:
     runningCounter = 0;
     jumpingCounter = 0;
     setState(0);
+    blast.reset();
     health.reset();
   }
 
@@ -686,7 +688,7 @@ public:
       resetFromJump();
       prevJump = false;
     }
-    if (!human.getBlast().hidden() && abs(human.getBlast().col() - col()) <= 2) {
+    if (!human.getBlast().hidden() && abs(human.getBlast().col() - col()) <= 2 && random(0, 10) < 7) {
       jump();
       prevJump = true;
     } else {
@@ -751,11 +753,11 @@ void receiveEvent(int bytes) {
 
 
 void handleCollisions() {
-  if (player.getBlast().samePosition(opponent)) {
+  if (!player.getBlast().hidden() && player.getBlast().samePosition(opponent)) {
     opponent.takeDamage();
     player.getBlast().reset();
   }
-  if (opponent.getBlast().samePosition(player)) {
+  if (!opponent.getBlast().hidden() && opponent.getBlast().samePosition(player)) {
     player.takeDamage();
     opponent.getBlast().reset();
   }
