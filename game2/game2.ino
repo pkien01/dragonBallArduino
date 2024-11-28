@@ -112,10 +112,13 @@ public:
   int row() const { return r; }
   int col() const { return c; }
   bool hidden() const {return hide; }
+  bool samePosition(const Entity &other) {
+    return r == other.r && c == other.c;
+  }
 };
 
 class Frame {
-  Container<Entity*, 5> entities;
+  Container<Entity*, 10> entities;
   Container<Canvas, 8> customChars;
   Canvas screen[2][16];
 public: 
@@ -333,6 +336,12 @@ public:
       counter = 0;
     }
   }
+  void reset() {
+    setState(dir == 1? 0 : 5);
+    hide = true;
+    r = entity->row();
+    c = entity->col() + dir;
+  }
 };
 
 constexpr byte runningBytes[8] = {
@@ -390,13 +399,111 @@ constexpr byte shootingBytes[8] = {
   B10011
 };
 
+constexpr byte healthBarBytes[6][8] = {
+  {
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B00000
+  },
+  {
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B10000,
+    B00000,
+    B00000
+  },
+  {
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B11000,
+    B00000,
+    B00000
+  },
+  {
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B11100,
+    B00000,
+    B00000
+  },
+  {
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B11110,
+    B00000,
+    B00000
+  },
+  {
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B00000,
+    B11111,
+    B00000,
+    B00000
+  },
+};
+
+class HealthBar: public Entity {
+  int maxPoints;
+  int points;
+  Entity *entity;
+public:
+  HealthBar(Entity *_entity, int maxHealth): Entity(0, _entity->col(), 5), points(maxHealth) {
+    entity = _entity;
+    maxPoints = maxHealth;
+    points = maxHealth;
+    for (int i = 0; i < 6; i++) {
+      states.add(Canvas(healthBarBytes[i]));
+    }
+  }
+  void reset() {
+    points = maxPoints;
+    r = 0;
+    c = entity->col();
+    setState(5);
+  }
+  int value() {
+    return points;
+  }
+  void decrement() {
+    if (points > 0) {
+      points--;
+    }
+  }
+  void update() {
+    r = 0;
+    c = entity->col();
+    setState(points * 5 / maxPoints);
+  }
+};
 
 class Human: public Entity {
   int runningCounter;
   int jumpingCounter;
   Projectile blast;
+  HealthBar health;
+  int initR, initC;
 public:
-  Human(int initR, int initC): Entity(initR, initC, 0), blast(this, 1) {
+  Human(int _initR, int _initC): initR(_initR), initC(_initC), Entity(_initR, _initC, 0), blast(this, 1), health(this, 10) {
     states.add(Canvas(standingBytes));
     states.add(Canvas(runningBytes));
     states.add(Canvas(jumping1Bytes));
@@ -406,7 +513,21 @@ public:
     jumpingCounter = 0;
     setState(0);
   }
-  void runRight() {
+  void resetAll() {
+    r = initR;
+    c = initC;
+    runningCounter = 0;
+    jumpingCounter = 0;
+    setState(0);
+    health.reset();
+  }
+  void takeDamage() {
+    health.decrement();
+  }
+  HealthBar& getHealthBar() {
+    return health;
+  }
+  void runRight(int maxCol) {
     if (statePtr == 0) {
       setState(1);
     } else {
@@ -414,13 +535,13 @@ public:
     }
     if (runningCounter == 16) {
       runningCounter = 0;
-      if (c < 15) {
+      if (c < maxCol) {
         c++;
       }
     }
     runningCounter++;
   }
-  void runLeft() {
+  void runLeft(int minCol) {
     if (statePtr == 0) {
       setState(1);
     } else {
@@ -428,7 +549,7 @@ public:
     }
     if (runningCounter == 16) {
       runningCounter = 0;
-      if (c > 0) {
+      if (c > minCol) {
         c--;
       }
     }
@@ -437,12 +558,17 @@ public:
   void jump() {
     if (statePtr == 0) {
       setState(2);
+      jumpingCounter = 4;
+      r = 0;
     } else if (statePtr == 2) {
-      setState(3);
-      r = 1;
+      if (--jumpingCounter <= 0) {
+        setState(3);
+        r = 1;
+      }
     } else if (statePtr ==3) {
       setState(2);
       r = 0;
+      jumpingCounter = 4;
     } else {
       setState(0);
     }
@@ -464,8 +590,13 @@ class Android: public Entity {
   int runningCounter;
   int jumpingCounter;
   Projectile blast;
+  bool prevJump;
+  int actionCounter;
+  int curAction;
+  HealthBar health;
+  int initR, initC;
 public:
-  Android(int initR, int initC): Entity(initR, initC, 0), blast(this, -1) {
+  Android(int _initR, int _initC): initR(_initR), initC(_initC), Entity(_initR, _initC, 0), blast(this, -1), health(this, 10) {
     states.add(Canvas(standingBytes).reverseRows());
     states.add(Canvas(runningBytes).reverseRows());
     states.add(Canvas(jumping1Bytes).reverseRows());
@@ -474,30 +605,47 @@ public:
     runningCounter = 0;
     jumpingCounter = 0;
     setState(0);
+    prevJump = false;
+    actionCounter = 0;
   }
-  void runRight() {
+  void resetAll() {
+    r = initR;
+    c = initC;
+    runningCounter = 0;
+    jumpingCounter = 0;
+    setState(0);
+    health.reset();
+  }
+
+  void takeDamage() {
+    health.decrement();
+  }
+  HealthBar& getHealthBar() {
+    return health;
+  }
+  void runRight(int maxCol) {
     if (statePtr == 0) {
       setState(1);
     } else {
       setState(0);
     }
-    if (runningCounter == 16) {
+    if (runningCounter == 4) {
       runningCounter = 0;
-      if (c < 15) {
+      if (c < maxCol) {
         c++;
       }
     }
     runningCounter++;
   }
-  void runLeft() {
+  void runLeft(int minCol) {
     if (statePtr == 0) {
       setState(1);
     } else {
       setState(0);
     }
-    if (runningCounter == 16) {
+    if (runningCounter == 4) {
       runningCounter = 0;
-      if (c > 0) {
+      if (c > minCol) {
         c--;
       }
     }
@@ -506,12 +654,17 @@ public:
   void jump() {
     if (statePtr == 0) {
       setState(2);
+      jumpingCounter = 2;
+      r = 0;
     } else if (statePtr == 2) {
-      setState(3);
-      r = 1;
+      if (--jumpingCounter <= 0) {
+        setState(3);
+        r = 1;
+      }
     } else if (statePtr ==3) {
       setState(2);
       r = 0;
+      jumpingCounter = 2;
     } else {
       setState(0);
     }
@@ -519,6 +672,7 @@ public:
   void resetFromJump() {
     r = 1;
     setState(0);
+    jumpingCounter = 0;
   }
   void shoot() {
     setState(4);
@@ -527,8 +681,31 @@ public:
   Projectile& getBlast() {
     return blast;
   }
-  void update() {
-    shoot();
+  void update(const Human &human) {
+    if (prevJump) {
+      resetFromJump();
+      prevJump = false;
+    }
+    if (!human.getBlast().hidden() && abs(human.getBlast().col() - col()) <= 2) {
+      jump();
+      prevJump = true;
+    } else {
+      if (--actionCounter <= 0) {
+        if (c - 1 <= human.col()) {
+          curAction = random(1, 3);
+        } else if (c + 1 > 15) {
+          curAction = random(0, 2);
+        } else {
+          curAction = random(0, 3);
+        }
+        actionCounter = 10;
+      }
+      switch (curAction) {
+        case 0: runLeft(human.col()); break;
+        case 1: shoot(); break;
+        case 2: runRight(15); break;
+      }
+    }
   }
 };
 
@@ -545,8 +722,10 @@ void setup() {
   lcd.begin(16, 2);
   frame.addEntity(&player);
   frame.addEntity(&player.getBlast());
+  frame.addEntity(&player.getHealthBar());
   frame.addEntity(&opponent);
   frame.addEntity(&opponent.getBlast());
+  frame.addEntity(&opponent.getHealthBar());
   Wire.begin(9); 
   Wire.onReceive(receiveEvent);
 }
@@ -562,18 +741,51 @@ void receiveEvent(int bytes) {
      player.resetFromJump();
   }
   switch (command) {
-    case 'l': player.runLeft(); break;
-    case 'r': player.runRight(); break;
+    case 'l': player.runLeft(0); break;
+    case 'r': player.runRight(opponent.col() - 1); break;
     case 'b': player.shoot(); break;
     case 'j': player.jump(); break;
   }
   prevCommand = command;
 }
 
+
+void handleCollisions() {
+  if (player.getBlast().samePosition(opponent)) {
+    opponent.takeDamage();
+    player.getBlast().reset();
+  }
+  if (opponent.getBlast().samePosition(player)) {
+    player.takeDamage();
+    opponent.getBlast().reset();
+  }
+}
 void loop() {
   // put your main code here, to run repeatedly:
+  // Serial.print("player position: ");
+  // Serial.print(player.row());
+  // Serial.print(" ");
+  // Serial.print(player.col());
+  // Serial.println(".");
   frame.draw(lcd);
-  player.getBlast().update();
-  opponent.update();
-  opponent.getBlast().update();
+  if (player.getHealthBar().value() <= 0) {
+    lcd.setCursor(4, 0);
+    lcd.print("You lose!");
+    player.resetAll();
+    opponent.resetAll();
+    delay(5000);
+  } else if (opponent.getHealthBar().value() <= 0) {
+    lcd.setCursor(4, 0);
+    lcd.print("You win!");
+    player.resetAll();
+    opponent.resetAll();
+    delay(5000);
+  } else {
+    player.getBlast().update();
+    opponent.update(player);
+    opponent.getBlast().update();
+    handleCollisions();
+    player.getHealthBar().update();
+    opponent.getHealthBar().update();
+  }
 }
