@@ -703,7 +703,7 @@ public:
         actionCounter = 10;
       }
       switch (curAction) {
-        case 0: runLeft(human.col()); break;
+        case 0: runLeft(human.col() + 1); break;
         case 1: shoot(); break;
         case 2: runRight(15); break;
       }
@@ -717,11 +717,20 @@ LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 Frame frame;
 Human player(1, 0);
 Android opponent(1, 15);
+
+void intro() {
+  lcd.setCursor(0, 0);
+  lcd.print("Dragon Ball Game");
+  lcd.setCursor(4, 1);
+  lcd.print("by Kien Pham");
+  delay(5000);
+}
 void setup() {
   // put your setup code here, to run once:
   pinMode(A0, INPUT);
   Serial.begin(9600);
   lcd.begin(16, 2);
+  intro();
   frame.addEntity(&player);
   frame.addEntity(&player.getBlast());
   frame.addEntity(&player.getHealthBar());
