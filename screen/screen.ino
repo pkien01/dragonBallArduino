@@ -129,14 +129,6 @@ public:
     Canvas newScreen[2][16];
     Container<Canvas, 8> requiredChars;
     for (int i = 0; i < entities.size(); i++) {
-      // Serial.print("Entity ");
-      // Serial.println(i);
-      // Serial.print("row: ");
-      // Serial.println(entities[i]->row());
-      // Serial.print("col: ");
-      // Serial.println(entities[i]->col());
-      // Serial.println("***************");
-      // Serial.flush();
       if (!entities[i]->hidden()) {
         requiredChars.add(newScreen[entities[i]->row()][entities[i]->col()].merge(entities[i]->getState()));
       }
@@ -168,15 +160,6 @@ public:
       }
     }
 
-    // Serial.print("Drawing ");
-    // Serial.print(customChars.size());
-    //  Serial.println(" entities:");
-    // for (int i = 0; i < customChars.size(); i++) {
-    //   customChars[i].print();
-    //   Serial.println();
-    // }
-    // Serial.flush();
-
     for (int i = 0; i < customChars.size(); i++) {
       if (!(used >> i & 1)) customChars[i].createChar(lcd, i);
     }
@@ -195,13 +178,6 @@ public:
               break;
             }
           }
-          // Serial.print("i: ");
-          // Serial.println(i);
-          // Serial.print("j: ");
-          // Serial.println(j);
-          // Serial.print("k: ");
-          // Serial.println(id);
-          // Serial.flush();
 
           lcd.write(byte(id));
         }
@@ -209,14 +185,6 @@ public:
     }
 
     for (int i = 0; i < entities.size(); i++) {
-      // Serial.print("Entity ");
-      // Serial.println(i);
-      // Serial.print("row: ");
-      // Serial.println(entities[i]->row());
-      // Serial.print("col: ");
-      // Serial.println(entities[i]->col());
-      // Serial.println("***************");
-      // Serial.flush();
       if (!entities[i]->hidden() && entities[i]->getLabel() > 0) {
         lcd.setCursor(entities[i]->col(), entities[i]->row() == 0? 1 : 0);
         lcd.print(entities[i]->getLabel());
@@ -304,14 +272,6 @@ public:
     dir = _dir;
   }
   void update() {
-    if (stop) {
-      Serial.print(r);
-      Serial.print(" ");
-      Serial.println(c);
-      Serial.print("counter: ");
-      Serial.println(counter);
-      Serial.flush();
-    }
     if (hide) return;
     if (counter < 0 || counter >= 6) {
       counter = dir == 1? 0 : 6;
@@ -528,33 +488,41 @@ public:
   HealthBar& getHealthBar() {
     return health;
   }
-  void runRight(int maxCol) {
+  bool runRight(int maxCol) {
     if (statePtr == 0) {
       setState(1);
     } else {
       setState(0);
     }
+    bool res = true;
     if (runningCounter == 16) {
       runningCounter = 0;
       if (c < maxCol) {
         c++;
+      } else {
+        res = false;
       }
     }
     runningCounter++;
+    return res;
   }
-  void runLeft(int minCol) {
+  bool runLeft(int minCol) {
     if (statePtr == 0) {
       setState(1);
     } else {
       setState(0);
     }
+    bool res = true;
     if (runningCounter == 16) {
       runningCounter = 0;
       if (c > minCol) {
         c--;
+      } else {
+        res = false;
       }
     }
     runningCounter++;
+    return res;
   }
   void jump() {
     if (statePtr == 0) {
@@ -625,33 +593,41 @@ public:
   HealthBar& getHealthBar() {
     return health;
   }
-  void runRight(int maxCol) {
+  bool runRight(int maxCol) {
     if (statePtr == 0) {
       setState(1);
     } else {
       setState(0);
     }
+    bool res= true;
     if (runningCounter == 4) {
       runningCounter = 0;
       if (c < maxCol) {
         c++;
+      } else {
+        res = false;
       }
     }
     runningCounter++;
+    return res;
   }
-  void runLeft(int minCol) {
+  bool runLeft(int minCol) {
     if (statePtr == 0) {
       setState(1);
     } else {
       setState(0);
     }
+    bool res= true;
     if (runningCounter == 4) {
       runningCounter = 0;
       if (c > minCol) {
         c--;
+      } else {
+        res = false;
       }
     }
     runningCounter++;
+    return res;
   }
   void jump() {
     if (statePtr == 0) {
@@ -703,9 +679,19 @@ public:
         actionCounter = 10;
       }
       switch (curAction) {
-        case 0: runLeft(human.col() + 1); break;
+        case 0: {
+          if (!runLeft(human.col() + 1)) {
+            actionCounter = 0;
+          }
+          break;
+        }
         case 1: shoot(); break;
-        case 2: runRight(15); break;
+        case 2: {
+          if (!runRight(15)) {
+            actionCounter = 0;
+          }
+          break;
+        }
       }
     }
   }
@@ -772,12 +758,6 @@ void handleCollisions() {
   }
 }
 void loop() {
-  // put your main code here, to run repeatedly:
-  // Serial.print("player position: ");
-  // Serial.print(player.row());
-  // Serial.print(" ");
-  // Serial.print(player.col());
-  // Serial.println(".");
   frame.draw(lcd);
   if (player.getHealthBar().value() <= 0) {
     lcd.setCursor(4, 0);
